@@ -1,5 +1,6 @@
 import csv
 import os
+import xml.etree.ElementTree as ET
 import time
 
 
@@ -24,7 +25,11 @@ class GetInfo:
             path_to_csv_file = input("{}[*]{} Введите путь до файла: ".format(Color.Green, Color.Reset))
 
             if os.path.exists(path_to_csv_file):
-                return path_to_csv_file
+                if path_to_csv_file.endswith('.csv') or path_to_csv_file.endswith('.xml'):
+                    return path_to_csv_file
+                else:
+                    print("{}[!]{} Введен неверный тип файла, пожалуйста, используйте xml или csv".
+                          format(Color.Red, Color.Reset))
             else:
                 query = input("{}[!]{} К сожалению файл не был обнаружен по указанному пути\n"
                               "{}[?]{} Вы хотите продолжить поиск?(y/n): ".format(Color.Red,
@@ -40,7 +45,7 @@ class GetInfo:
                           "поэтому вам снова будет предложено ввести путь до файла!".format(Color.Red, Color.Reset))
 
     def get_count_of_houses(self):
-        if self.uniq_rows is not None:
+        if self.uniq_rows:
             for k in self.uniq_rows:
                 key = (k[0], k[3])
                 self.count_of_houses[key] = self.count_of_houses.setdefault(key, 0) + 1
@@ -48,13 +53,28 @@ class GetInfo:
 
     def uniq(self):
         if self.path is not None:
-            with open(self.path, 'r', encoding="utf-8") as f:
-                next(f)
-                spam_reader = csv.reader(f, delimiter=";", quotechar='"')
+            if self.path.endswith(".csv"):
+                with open(self.path, 'r', encoding="utf-8") as f:
+                    next(f)
+                    spam_reader = csv.reader(f, delimiter=";", quotechar='"')
 
-                for row in spam_reader:
-                    row_tuple = tuple(row)
-                    self.uniq_rows[row_tuple] = self.uniq_rows.setdefault(row_tuple, 0) + 1
+                    for row in spam_reader:
+                        row_tuple = tuple(row)
+                        self.uniq_rows[row_tuple] = self.uniq_rows.setdefault(row_tuple, 0) + 1
+            else:
+                tree = ET.parse(self.path)
+                root = tree.getroot()
+
+                for item in root.findall("item"):
+                    city = item.get('city')
+                    street = item.get('street')
+                    house = item.get('house')
+                    floor = item.get('floor')
+
+                    row_tuple = (city, street, house, floor)
+
+                    if all(row_tuple):
+                        self.uniq_rows[row_tuple] = self.uniq_rows.setdefault(row_tuple, 0) + 1
 
     def out_duplicates(self):
         print("\n{}[O]{} Дубликаты: {}\n".format(Color.Green, Color.Blue, Color.Reset))
@@ -82,44 +102,48 @@ class GetInfo:
                 print("\t".join(str(k[i]).ljust(max_lengths[i]) for i in range(len(k))), f"\t{v}")
 
         if not duplicates_found:
-            print("Дубликаты не были найдены")
+            print("{}[!]{} Дубликаты не были найдены".format(Color.Red, Color.Reset))
 
         print("\n")
 
     def out_count_of_houses(self):
         print("{}[O]{} Количество домов в каждом городе по этажам: {}\n".format(Color.Green, Color.Blue, Color.Reset))
-        headers = ["Город", "Количество этажей", "Количество домов"]
 
-        max_lengths = [len(header) for header in headers]
+        if self.count_of_houses:
+            headers = ["Город", "Количество этажей", "Количество домов"]
 
-        for (city, floors), count in self.count_of_houses.items():
-            max_lengths[0] = max(max_lengths[0], len(city))
-            max_lengths[1] = max(max_lengths[1], len(str(floors)))
-            max_lengths[2] = max(max_lengths[2], len(str(count)))
+            max_lengths = [len(header) for header in headers]
 
-        header_row = "\t".join(header.ljust(max_lengths[i]) for i, header in enumerate(headers))
-        print(header_row)
+            for (city, floors), count in self.count_of_houses.items():
+                max_lengths[0] = max(max_lengths[0], len(city))
+                max_lengths[1] = max(max_lengths[1], len(str(floors)))
+                max_lengths[2] = max(max_lengths[2], len(str(count)))
 
-        prev_city = ""
+            header_row = "\t".join(header.ljust(max_lengths[i]) for i, header in enumerate(headers))
+            print(header_row)
 
-        for (city, floors), count in self.count_of_houses.items():
-            if city != prev_city:
-                print(f"{(max_lengths[0] + 4) * "-"}"
-                      f"{(max_lengths[1] + 4) * "-"}"
-                      f"{max_lengths[2] * "-"}")
-            if int(floors) == 3:
-                print(f"{str(city.ljust(max_lengths[0]))}\t"
-                      f"{str(floors).ljust(max_lengths[1])}\t"
-                      f"{str(count).ljust(max_lengths[2])}")
-            else:
-                print(f"{''.ljust(max_lengths[0])}\t"
-                      f"{str(floors).ljust(max_lengths[1])}\t"
-                      f"{str(count).ljust(max_lengths[2])}")
-            prev_city = city
+            prev_city = ""
 
-        print(f"{(max_lengths[0] + 4) * "-"}"
-              f"{(max_lengths[1] + 4) * "-"}"
-              f"{max_lengths[2] * "-"}\n")
+            for (city, floors), count in self.count_of_houses.items():
+                if city != prev_city:
+                    print(f"{(max_lengths[0] + 4) * "-"}"
+                          f"{(max_lengths[1] + 4) * "-"}"
+                          f"{max_lengths[2] * "-"}")
+                if int(floors) == 3:
+                    print(f"{str(city.ljust(max_lengths[0]))}\t"
+                          f"{str(floors).ljust(max_lengths[1])}\t"
+                          f"{str(count).ljust(max_lengths[2])}")
+                else:
+                    print(f"{''.ljust(max_lengths[0])}\t"
+                          f"{str(floors).ljust(max_lengths[1])}\t"
+                          f"{str(count).ljust(max_lengths[2])}")
+                prev_city = city
+
+            print(f"{(max_lengths[0] + 4) * "-"}"
+                  f"{(max_lengths[1] + 4) * "-"}"
+                  f"{max_lengths[2] * "-"}\n")
+        else:
+            print("{}[!]{} Файл оказался пустым".format(Color.Red, Color.Reset))
 
 
 def process():
