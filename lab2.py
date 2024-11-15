@@ -19,24 +19,29 @@ class FileHandler:
     def get_path():
         while True:
             path_to_file = input(f"{Color.Green}[*]{Color.Reset} Введите путь до файла: ")
+
             if os.path.exists(path_to_file):
                 if path_to_file.endswith('.csv') or path_to_file.endswith('.xml'):
                     return path_to_file
                 else:
-                    print(f"{Color.Red}[!]{Color.Reset} Некорректный тип файла, используйте .csv или .xml.")
+                    print(f"{Color.Red}[!]{Color.Reset} Введен неверный тип файла. "
+                          f"Пожалуйста, используйте XML или CSV.")
             else:
-                query = input(f"{Color.Red}[!]{Color.Reset} Файл не найден. "
-                              f"{Color.Yellow}[?]{Color.Reset} Попробовать снова? (y/n): ")
+                if len(path_to_file) == 0:
+                    print(f"{Color.Red}[!]{Color.Reset} Не вводите пустую строку.")
+                    continue
+                query = input(f"{Color.Red}[!]{Color.Reset} Файл не найден.\n"
+                              f"{Color.Yellow}[?]{Color.Reset} Хотите продолжить поиск? (y/n): ")
                 if query.lower() == 'y':
                     continue
                 elif query.lower() == 'n':
                     return None
                 else:
-                    print(f"{Color.Red}[!]{Color.Reset} Неверный ввод. Повторите попытку.")
+                    print(f"{Color.Red}[!]{Color.Reset} Неверный ввод. Попробуйте снова!")
 
 
 class DataProcessor:
-    """Класс для обработки данных."""
+    """Класс для обработки данных из файла."""
 
     def __init__(self, path):
         self.path = path
@@ -51,11 +56,11 @@ class DataProcessor:
 
     def _process_csv(self):
         with open(self.path, 'r', encoding="utf-8") as f:
-            next(f)  # Пропустить заголовок
+            next(f)
             reader = csv.reader(f, delimiter=";", quotechar='"')
             for row in reader:
                 row_tuple = tuple(row)
-                self.uniq_rows[row_tuple] = self.uniq_rows.setdefault(row_tuple, 0) + 1
+                self.uniq_rows[row_tuple] = self.uniq_rows.get(row_tuple, 0) + 1
 
     def _process_xml(self):
         tree = ET.parse(self.path)
@@ -67,28 +72,26 @@ class DataProcessor:
             floor = item.get('floor')
             row_tuple = (city, street, house, floor)
             if all(row_tuple):
-                self.uniq_rows[row_tuple] = self.uniq_rows.setdefault(row_tuple, 0) + 1
+                self.uniq_rows[row_tuple] = self.uniq_rows.get(row_tuple, 0) + 1
 
-    def calculate_count_of_houses(self):
+    def calculate_house_counts(self):
         for row in self.uniq_rows:
-            key = (row[0], row[3])  # Город и количество этажей
-            self.count_of_houses[key] = self.count_of_houses.setdefault(key, 0) + 1
+            key = (row[0], row[3])  # (город, количество этажей)
+            self.count_of_houses[key] = self.count_of_houses.get(key, 0) + 1
         self.count_of_houses = dict(sorted(self.count_of_houses.items()))
 
 
 class DataPresenter:
-    """Класс для вывода информации."""
+    """Класс для отображения данных."""
 
     @staticmethod
     def display_duplicates(uniq_rows):
-        print(f"\n{Color.Green}[O]{Color.Blue} Дубликаты:{Color.Reset}\n")
-        duplicates_found = False
-        headers = ["Город", "Улица", "Дом", "Этажи", "Дубликаты"]
+        print(f"\n{Color.Green}[O]{Color.Blue} Дубликаты: {Color.Reset}\n")
+        headers = ["Город", "Улица", "Номер дома", "Количество этажей", "Количество дубликатов"]
         max_lengths = [len(header) for header in headers]
 
         for k, v in uniq_rows.items():
             if v > 1:
-                duplicates_found = True
                 for i, item in enumerate(k):
                     max_lengths[i] = max(max_lengths[i], len(item))
 
@@ -97,15 +100,18 @@ class DataPresenter:
 
         for k, v in uniq_rows.items():
             if v > 1:
+                print("-" * (sum(max_lengths) + 12))
                 print("\t".join(str(k[i]).ljust(max_lengths[i]) for i in range(len(k))), f"\t{v}")
 
-        if not duplicates_found:
-            print(f"{Color.Red}[!] Дубликаты не найдены{Color.Reset}")
+        if not any(v > 1 for v in uniq_rows.values()):
+            print(f"{Color.Red}[!]{Color.Reset} Дубликаты не найдены.")
+
+        print("\n")
 
     @staticmethod
-    def display_count_of_houses(count_of_houses):
-        print(f"\n{Color.Green}[O]{Color.Blue} Количество домов в каждом городе:{Color.Reset}\n")
-        headers = ["Город", "Этажи", "Дома"]
+    def display_house_counts(count_of_houses):
+        print(f"{Color.Green}[O]{Color.Blue} Количество домов в каждом городе по этажам: {Color.Reset}\n")
+        headers = ["Город", "Количество этажей", "Количество домов"]
         max_lengths = [len(header) for header in headers]
 
         for (city, floors), count in count_of_houses.items():
@@ -116,41 +122,54 @@ class DataPresenter:
         header_row = "\t".join(header.ljust(max_lengths[i]) for i, header in enumerate(headers))
         print(header_row)
 
+        prev_city = ""
         for (city, floors), count in count_of_houses.items():
-            print(f"{city.ljust(max_lengths[0])}\t{str(floors).ljust(max_lengths[1])}\t{str(count).ljust(max_lengths[2])}")
+            if city != prev_city:
+                print("-" * (sum(max_lengths) + 12))
+            if int(floors) == 3:
+                print(f"{city.ljust(max_lengths[0])}\t"
+                      f"{str(floors).ljust(max_lengths[1])}\t"
+                      f"{str(count).ljust(max_lengths[2])}")
+            else:
+                print(f"{''.ljust(max_lengths[0])}\t"
+                      f"{str(floors).ljust(max_lengths[1])}\t"
+                      f"{str(count).ljust(max_lengths[2])}")
+            prev_city = city
+
+        print("-" * (sum(max_lengths) + 12))
 
 
 class AppController:
-    """Класс для управления приложением."""
+    """Класс для управления процессом."""
 
-    def __init__(self):
-        self.file_handler = FileHandler()
-        self.data_processor = None
-        self.data_presenter = DataPresenter()
-
-    def run(self):
+    @staticmethod
+    def run():
         while True:
-            path = self.file_handler.get_path()
-            if path:
-                start_time = time.time()
-
-                self.data_processor = DataProcessor(path)
-                self.data_processor.load_data()
-                self.data_processor.calculate_count_of_houses()
-
-                self.data_presenter.display_duplicates(self.data_processor.uniq_rows)
-                self.data_presenter.display_count_of_houses(self.data_processor.count_of_houses)
-
-                end_time = time.time()
-                print(f"{Color.Green}[*]{Color.Reset} Время выполнения: {round(end_time - start_time, 2)} сек.\n")
-
-                query = input(f"{Color.Yellow}[?]{Color.Reset} Продолжить? (y/n): ")
-                if query.lower() != 'y':
-                    break
-            else:
+            path = FileHandler.get_path()
+            if not path:
                 break
+
+            start_time = time.time()
+            processor = DataProcessor(path)
+            processor.load_data()
+            processor.calculate_house_counts()
+
+            presenter = DataPresenter()
+            presenter.display_duplicates(processor.uniq_rows)
+            presenter.display_house_counts(processor.count_of_houses)
+
+            end_time = time.time()
+            print(f"{Color.Green}[*]{Color.Reset} Время выполнения программы: {round(end_time - start_time, 5)} сек.\n")
+
+            while True:
+                query = input(f"{Color.Yellow}[?]{Color.Reset} Продолжить (y/n)? ").lower()
+                if query == 'y':
+                    break
+                elif query == 'n':
+                    return
+                else:
+                    print(f"{Color.Red}[!]{Color.Reset} Неверный ввод. Введите 'y' или 'n'.")
 
 
 if __name__ == '__main__':
-    app = AppController()
-    app.run()
+    AppController().run()
