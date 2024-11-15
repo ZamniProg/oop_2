@@ -6,84 +6,87 @@ import time
 
 class Color:
     Reset = '\033[0m'
-
     Red = '\033[91m'
     Green = '\033[92m'
     Yellow = '\033[93m'
     Blue = '\033[94m'
 
 
-class GetInfo:
-    def __init__(self):
-        self.path = self.get_path()
-        self.count_of_houses = dict()
-        self.uniq_rows = dict()
+class FileHandler:
+    """Класс для работы с файлами."""
 
     @staticmethod
     def get_path():
         while True:
-            path_to_csv_file = input("{}[*]{} Введите путь до файла: ".format(Color.Green, Color.Reset))
-
-            if os.path.exists(path_to_csv_file):
-                if path_to_csv_file.endswith('.csv') or path_to_csv_file.endswith('.xml'):
-                    return path_to_csv_file
+            path_to_file = input(f"{Color.Green}[*]{Color.Reset} Введите путь до файла: ")
+            if os.path.exists(path_to_file):
+                if path_to_file.endswith('.csv') or path_to_file.endswith('.xml'):
+                    return path_to_file
                 else:
-                    print("{}[!]{} Введен неверный тип файла, пожалуйста, используйте xml или csv".
-                          format(Color.Red, Color.Reset))
+                    print(f"{Color.Red}[!]{Color.Reset} Некорректный тип файла, используйте .csv или .xml.")
             else:
-                query = input("{}[!]{} К сожалению файл не был обнаружен по указанному пути\n"
-                              "{}[?]{} Вы хотите продолжить поиск?(y/n): ".format(Color.Red,
-                                                                                  Color.Reset,
-                                                                                  Color.Yellow,
-                                                                                  Color.Reset))
-                if query == 'y':
+                query = input(f"{Color.Red}[!]{Color.Reset} Файл не найден. "
+                              f"{Color.Yellow}[?]{Color.Reset} Попробовать снова? (y/n): ")
+                if query.lower() == 'y':
                     continue
-                elif query == 'n':
+                elif query.lower() == 'n':
                     return None
                 else:
-                    print("{}[!]{} К сожалению, вы ввели неверный символ, "
-                          "поэтому вам снова будет предложено ввести путь до файла!".format(Color.Red, Color.Reset))
+                    print(f"{Color.Red}[!]{Color.Reset} Неверный ввод. Повторите попытку.")
 
-    def get_count_of_houses(self):
-        if self.uniq_rows:
-            for k in self.uniq_rows:
-                key = (k[0], k[3])
-                self.count_of_houses[key] = self.count_of_houses.setdefault(key, 0) + 1
+
+class DataProcessor:
+    """Класс для обработки данных."""
+
+    def __init__(self, path):
+        self.path = path
+        self.uniq_rows = {}
+        self.count_of_houses = {}
+
+    def load_data(self):
+        if self.path.endswith(".csv"):
+            self._process_csv()
+        elif self.path.endswith(".xml"):
+            self._process_xml()
+
+    def _process_csv(self):
+        with open(self.path, 'r', encoding="utf-8") as f:
+            next(f)  # Пропустить заголовок
+            reader = csv.reader(f, delimiter=";", quotechar='"')
+            for row in reader:
+                row_tuple = tuple(row)
+                self.uniq_rows[row_tuple] = self.uniq_rows.setdefault(row_tuple, 0) + 1
+
+    def _process_xml(self):
+        tree = ET.parse(self.path)
+        root = tree.getroot()
+        for item in root.findall("item"):
+            city = item.get('city')
+            street = item.get('street')
+            house = item.get('house')
+            floor = item.get('floor')
+            row_tuple = (city, street, house, floor)
+            if all(row_tuple):
+                self.uniq_rows[row_tuple] = self.uniq_rows.setdefault(row_tuple, 0) + 1
+
+    def calculate_count_of_houses(self):
+        for row in self.uniq_rows:
+            key = (row[0], row[3])  # Город и количество этажей
+            self.count_of_houses[key] = self.count_of_houses.setdefault(key, 0) + 1
         self.count_of_houses = dict(sorted(self.count_of_houses.items()))
 
-    def uniq(self):
-        if self.path is not None:
-            if self.path.endswith(".csv"):
-                with open(self.path, 'r', encoding="utf-8") as f:
-                    next(f)
-                    spam_reader = csv.reader(f, delimiter=";", quotechar='"')
 
-                    for row in spam_reader:
-                        row_tuple = tuple(row)
-                        self.uniq_rows[row_tuple] = self.uniq_rows.setdefault(row_tuple, 0) + 1
-            else:
-                tree = ET.parse(self.path)
-                root = tree.getroot()
+class DataPresenter:
+    """Класс для вывода информации."""
 
-                for item in root.findall("item"):
-                    city = item.get('city')
-                    street = item.get('street')
-                    house = item.get('house')
-                    floor = item.get('floor')
-
-                    row_tuple = (city, street, house, floor)
-
-                    if all(row_tuple):
-                        self.uniq_rows[row_tuple] = self.uniq_rows.setdefault(row_tuple, 0) + 1
-
-    def out_duplicates(self):
-        print("\n{}[O]{} Дубликаты: {}\n".format(Color.Green, Color.Blue, Color.Reset))
+    @staticmethod
+    def display_duplicates(uniq_rows):
+        print(f"\n{Color.Green}[O]{Color.Blue} Дубликаты:{Color.Reset}\n")
         duplicates_found = False
-        headers = ["Город", "Улица", "Номер дома", "Количество этажей", "Количество дубликатов"]
-
+        headers = ["Город", "Улица", "Дом", "Этажи", "Дубликаты"]
         max_lengths = [len(header) for header in headers]
 
-        for k, v in self.uniq_rows.items():
+        for k, v in uniq_rows.items():
             if v > 1:
                 duplicates_found = True
                 for i, item in enumerate(k):
@@ -92,91 +95,62 @@ class GetInfo:
         header_row = "\t".join(header.ljust(max_lengths[i]) for i, header in enumerate(headers))
         print(header_row)
 
-        for k, v in self.uniq_rows.items():
+        for k, v in uniq_rows.items():
             if v > 1:
-                print(f"{(max_lengths[0] + 4) * "-"}"
-                      f"{(max_lengths[1] + 4) * "-"}"
-                      f"{(max_lengths[2] + 4) * "-"}"
-                      f"{(max_lengths[3] + 4) * "-"}"
-                      f"{max_lengths[4] * "-"}")
                 print("\t".join(str(k[i]).ljust(max_lengths[i]) for i in range(len(k))), f"\t{v}")
 
         if not duplicates_found:
-            print("{}[!]{} Дубликаты не были найдены".format(Color.Red, Color.Reset))
+            print(f"{Color.Red}[!] Дубликаты не найдены{Color.Reset}")
 
-        print("\n")
+    @staticmethod
+    def display_count_of_houses(count_of_houses):
+        print(f"\n{Color.Green}[O]{Color.Blue} Количество домов в каждом городе:{Color.Reset}\n")
+        headers = ["Город", "Этажи", "Дома"]
+        max_lengths = [len(header) for header in headers]
 
-    def out_count_of_houses(self):
-        print("{}[O]{} Количество домов в каждом городе по этажам: {}\n".format(Color.Green, Color.Blue, Color.Reset))
+        for (city, floors), count in count_of_houses.items():
+            max_lengths[0] = max(max_lengths[0], len(city))
+            max_lengths[1] = max(max_lengths[1], len(str(floors)))
+            max_lengths[2] = max(max_lengths[2], len(str(count)))
 
-        if self.count_of_houses:
-            headers = ["Город", "Количество этажей", "Количество домов"]
+        header_row = "\t".join(header.ljust(max_lengths[i]) for i, header in enumerate(headers))
+        print(header_row)
 
-            max_lengths = [len(header) for header in headers]
-
-            for (city, floors), count in self.count_of_houses.items():
-                max_lengths[0] = max(max_lengths[0], len(city))
-                max_lengths[1] = max(max_lengths[1], len(str(floors)))
-                max_lengths[2] = max(max_lengths[2], len(str(count)))
-
-            header_row = "\t".join(header.ljust(max_lengths[i]) for i, header in enumerate(headers))
-            print(header_row)
-
-            prev_city = ""
-
-            for (city, floors), count in self.count_of_houses.items():
-                if city != prev_city:
-                    print(f"{(max_lengths[0] + 4) * "-"}"
-                          f"{(max_lengths[1] + 4) * "-"}"
-                          f"{max_lengths[2] * "-"}")
-                if int(floors) == 3:
-                    print(f"{str(city.ljust(max_lengths[0]))}\t"
-                          f"{str(floors).ljust(max_lengths[1])}\t"
-                          f"{str(count).ljust(max_lengths[2])}")
-                else:
-                    print(f"{''.ljust(max_lengths[0])}\t"
-                          f"{str(floors).ljust(max_lengths[1])}\t"
-                          f"{str(count).ljust(max_lengths[2])}")
-                prev_city = city
-
-            print(f"{(max_lengths[0] + 4) * "-"}"
-                  f"{(max_lengths[1] + 4) * "-"}"
-                  f"{max_lengths[2] * "-"}\n")
-        else:
-            print("{}[!]{} Файл оказался пустым".format(Color.Red, Color.Reset))
+        for (city, floors), count in count_of_houses.items():
+            print(f"{city.ljust(max_lengths[0])}\t{str(floors).ljust(max_lengths[1])}\t{str(count).ljust(max_lengths[2])}")
 
 
-def process():
-    r = 1
+class AppController:
+    """Класс для управления приложением."""
 
-    while r:
-        proc = GetInfo()
+    def __init__(self):
+        self.file_handler = FileHandler()
+        self.data_processor = None
+        self.data_presenter = DataPresenter()
 
-        if proc.path:
-            start_time = time.time()
+    def run(self):
+        while True:
+            path = self.file_handler.get_path()
+            if path:
+                start_time = time.time()
 
-            proc.uniq()
-            proc.get_count_of_houses()
-            proc.out_duplicates()
-            proc.out_count_of_houses()
+                self.data_processor = DataProcessor(path)
+                self.data_processor.load_data()
+                self.data_processor.calculate_count_of_houses()
 
-            end_time = time.time()
-            print("{}[*]{} Время выполнения программы: ".format(Color.Green, Color.Reset),
-                  round(end_time - start_time, 5), "сек.\n")
+                self.data_presenter.display_duplicates(self.data_processor.uniq_rows)
+                self.data_presenter.display_count_of_houses(self.data_processor.count_of_houses)
 
-            while True:
-                r = input("{}[?]{} Продолжить (y/n)? ".format(Color.Yellow, Color.Reset))
-                if r.lower() == 'y':
-                    r = 1
+                end_time = time.time()
+                print(f"{Color.Green}[*]{Color.Reset} Время выполнения: {round(end_time - start_time, 2)} сек.\n")
+
+                query = input(f"{Color.Yellow}[?]{Color.Reset} Продолжить? (y/n): ")
+                if query.lower() != 'y':
                     break
-                elif r.lower() == 'n':
-                    r = 0
-                    break
-                else:
-                    print("{}[!]{} Некорректный ввод. Введите 'y' или 'n'.".format(Color.Red, Color.Reset))
-        else:
-            break
+            else:
+                break
 
 
 if __name__ == '__main__':
-    process()
+    app = AppController()
+    app.run()
